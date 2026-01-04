@@ -220,7 +220,7 @@ def checkConstructors (indTypes : Array InductiveType)
             loop (body.instantiate1 param) (i + 1) fuel
           else
             let s ← ensureType dom
-            unless stats.resultLevel.isZero || stats.resultLevel.geq' s.sortLevel! do
+            unless stats.resultLevel.isZero || stats.resultLevel.geqKernel s.sortLevel! do
               throw <| .other s!"universe level of type_of(arg #{i + 1}) of '{n}' \
                 is too big for the corresponding inductive datatype"
             if !isUnsafe then

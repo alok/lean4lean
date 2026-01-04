@@ -245,6 +245,30 @@ def isEquivList : List Level → List Level → Bool := List.all2 isEquiv'
 
 def geq' (u v : Level) : Bool := (Normalize.normalize v).le (Normalize.normalize u)
 
+def toOffset (l : Level) : Level × Nat :=
+  (l.getLevelOffset, l.getOffset)
+
+partial def geqKernel (u v : Level) : Bool := geqCore (Lean.Level.normalize u) (Lean.Level.normalize v) where
+  geqCore (u v : Level) : Bool :=
+    if u == v || v.isZero then true
+    else
+      match v with
+      | .max l₁ l₂ => geqKernel u l₁ && geqKernel u l₂
+      | .imax l₁ l₂ => geqKernel u l₁ && geqKernel u l₂
+      | _ =>
+        match u with
+        | .max l₁ l₂ => geqKernel l₁ v || geqKernel l₂ v
+        | .imax _ l₂ => geqKernel l₂ v
+        | _ =>
+          let p1 := toOffset u
+          let p2 := toOffset v
+          if p1.1 == p2.1 || p2.1.isZero then
+            p1.2 >= p2.2
+          else if p1.2 == p2.2 && p1.2 > 0 then
+            geqKernel p1.1 p2.1
+          else
+            false
+
 -- local elab "normalize " l:level : command => do
 --   Elab.Command.runTermElabM fun _ => do
 --     logInfo m!"{normalize' (← Elab.Term.elabLevel l)}"
