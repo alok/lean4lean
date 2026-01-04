@@ -49,12 +49,12 @@ theorem Closed.natLitToConstructor : Closed (.natLitToConstructor n) k := by
   cases n <;> simp [Closed, Expr.natLitToConstructor, Expr.natZero, Expr.natSucc]
 
 theorem FVarsIn.strLitToConstructor : FVarsIn P (.strLitToConstructor s) := by
-  simp [FVarsIn, String.foldr_eq, Expr.strLitToConstructor]
-  induction s.data <;> simp [*, FVarsIn, Level.hasMVar']
+  simp [FVarsIn, Expr.strLitToConstructor]
+  induction s.toList <;> simp [*, FVarsIn, Level.hasMVar']
 
 theorem Closed.strLitToConstructor : Closed (.strLitToConstructor s) k := by
-  simp [Closed, String.foldr_eq, Expr.strLitToConstructor]
-  induction s.data <;> simp [*, Closed]
+  simp [Closed, Expr.strLitToConstructor]
+  induction s.toList <;> simp [*, Closed]
 
 theorem FVarsIn.toConstructor : ∀ {l : Literal}, FVarsIn P l.toConstructor
   | .natVal _ => .natLitToConstructor
@@ -1448,16 +1448,29 @@ theorem substParams_wf (red) (H : VLevel.ofLevel ps u = some u') :
       exact ⟨_, ⟨_, a1, _, b1, rfl⟩, VLevel.imax_congr a2 b2⟩
   | param x =>
     obtain ⟨H, rfl⟩ := H; subst eqF; simp
-    have := List.idxOf_eq_idxOf? x ps; revert this
-    split <;> simp [*, Nat.ne_of_lt, VLevel.inst]; rintro rfl; clear ‹_› eq
-    generalize List.idxOf x ps = n at *
-    rw [List.mapM_eq_some] at Hls
-    induction Hls generalizing n with
-    | nil => cases H
-    | cons Hl _ ih =>
-      obtain _|n := n <;> simp
-      · exact ⟨_, Hl, rfl⟩
-      · exact ih _ (Nat.lt_of_succ_lt_succ H)
+    cases hopt : List.idxOf? x ps with
+    | none =>
+      have hx : x ∉ ps := (List.idxOf?_eq_none_iff).1 hopt
+      have hlen : List.idxOf x ps = ps.length := List.idxOf_eq_length hx
+      have hlt : List.idxOf x ps < ps.length := by simpa [eq] using H
+      exact (False.elim (by simpa [hlen] using hlt))
+    | some n =>
+      have hopt' : List.findIdx? (fun y => y == x) ps = some n := by
+        simpa [List.idxOf?] using hopt
+      have hidx : List.idxOf x ps = n := by
+        simpa [List.idxOf, hopt'] using
+          (List.findIdx_eq_getD_findIdx? (xs := ps) (p := fun y => y == x))
+      have Hlt : n < ls.length := by simpa [hidx] using H
+      clear eq H
+      simp [hidx, VLevel.inst]
+      clear hopt hopt' hidx
+      rw [List.mapM_eq_some] at Hls
+      induction Hls generalizing n with
+      | nil => cases Hlt
+      | cons Hl _ ih =>
+        obtain _|n := n <;> simp
+        · exact ⟨_, Hl, rfl⟩
+        · exact ih _ (Nat.lt_of_succ_lt_succ Hlt)
 
 theorem substParams_wf_list (red) {us us' : List _} (H : us.mapM (VLevel.ofLevel ps) = some us') :
     ∃ us₁, (us.map (Level.substParams' F red)).mapM (VLevel.ofLevel Us) = some us₁ ∧
@@ -1574,10 +1587,13 @@ theorem TrExprS.IsUnique.natLitToConstructor : ∀ {n : Nat}, IsUnique (.natLitT
   | _+1 => ⟨⟨⟩, ⟨⟩⟩
 
 theorem TrExprS.IsUnique.strLitToConstructor {s : String} : IsUnique (.strLitToConstructor s) := by
-  refine ⟨⟨⟩, ?_⟩; simp [String.foldr_eq]
-  induction s.data with simp
-  | nil => exact ⟨⟨⟩, ⟨⟩⟩
-  | cons _ _ ih => exact ⟨⟨⟨⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩⟩⟩, ih⟩
+  refine ⟨⟨⟩, ?_⟩
+  induction s.toList with
+  | nil =>
+    exact ⟨⟨⟩, ⟨⟩⟩
+  | cons _ _ ih =>
+    simp [List.foldr]
+    exact ⟨⟨⟨⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩⟩⟩, ih⟩
 
 theorem TrExprS.IsUnique.toConstructor : ∀ {l : Literal}, IsUnique l.toConstructor
   | .natVal _ => .natLitToConstructor
@@ -1803,8 +1819,8 @@ theorem TrExprS.trLiteral (wf : env.Ordered) (henv : env.HasPrimitives)
   | .natVal n => exact TrExprS.natLit henv H _
   | .strVal s =>
     have a := TrExprS.stringMk henv H (Us := Us) (Δ := Δ)
-    have b := TrExprS.listCharLit wf henv H (Us := Us) (Δ := Δ) s.data
-    exact ⟨.lit (.app a.2 b.2 a.1 (String.foldr_eq .. ▸ b.1)), a.2.app b.2⟩
+    have b := TrExprS.listCharLit wf henv H (Us := Us) (Δ := Δ) s.toList
+    exact ⟨.lit (.app a.2 b.2 a.1 b.1), a.2.app b.2⟩
 
 def VLocalDecl.ClosedN : VLocalDecl → (k : Nat := 0) → Prop
   | .vlam A, k => A.ClosedN k

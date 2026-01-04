@@ -566,20 +566,27 @@ termination_by structural n
 
 @[simp] def MLCtx.mkLet (c : MLCtx) (n) (hn : n ≤ c.length)
     (nds : List (Option Bool)) (eq : nds.length = n) (e : Expr) (asForall := false) : Expr :=
-  match n, c, hn, nds, eq, e with
-  | 0, _, _, _, _, e => e
-  | n+1, .vlam x name ty _ bi c, h, _ :: nds, eq, e =>
-    c.mkLet n (Nat.le_of_succ_le_succ h) nds (Nat.succ_inj.1 eq) <|
+  match n, c, nds with
+  | 0, _, _ => e
+  | n+1, .nil, _ => (Nat.not_succ_le_zero n (by simpa using hn)).elim
+  | n+1, .vlam x name ty _ bi c, [] => by cases eq
+  | n+1, .vlam x name ty _ bi c, nd :: nds =>
+    have eq' : nds.length = n := by
+      simpa using (Nat.succ_inj.1 eq)
+    c.mkLet n (Nat.le_of_succ_le_succ hn) nds eq' <|
       if asForall then .forallE name ty (.abstract1 x e) bi else .lam name ty (.abstract1 x e) bi
-  | n+1, .vlet x name ty val _ _ c, h, nd :: nds, eq, e =>
-    c.mkLet n (Nat.le_of_succ_le_succ h) nds (Nat.succ_inj.1 eq) <|
+  | n+1, .vlet x name ty val _ _ c, [] => by cases eq
+  | n+1, .vlet x name ty val _ _ c, nd :: nds =>
+    have eq' : nds.length = n := by
+      simpa using (Nat.succ_inj.1 eq)
+    c.mkLet n (Nat.le_of_succ_le_succ hn) nds eq' <|
       let e' := Expr.abstract1 x e
       if e'.hasLooseBVar' 0 then
         .letE name ty val e' (nd.getD false)
-      else if let some nd := nd then
-        .letE name ty val e' nd
       else
-        e'.lowerLooseBVars' 1 1
+        match nd with
+        | some nd => .letE name ty val e' nd
+        | none => e'.lowerLooseBVars' 1 1
 termination_by structural n
 
 variable! (henv : VEnv.WF env) in
