@@ -3,8 +3,8 @@ defaultTargets = ["Lean4Lean", "lean4lean", "Lean4Lean.Theory", "Lean4Lean.Verif
 
 [[require]]
 name = "batteries"
-git = "https://github.com/leanprover-community/batteries"
-rev = "v4.23.0"
+git = "file:///Users/alokbeniwal/tmp/batteries"
+rev = "dc3c53dff5421d6f09e7f19eae0b48881d8343a1"
 
 [[lean_lib]]
 name = "Lean4Lean"
