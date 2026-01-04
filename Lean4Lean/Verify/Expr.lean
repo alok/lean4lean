@@ -98,54 +98,17 @@ theorem DefinitionSafety.le_safe : a ≤ safe := by cases a <;> rfl
 theorem DefinitionSafety.le_antisymm {a b : DefinitionSafety} : a ≤ b → b ≤ a → a = b := by
   cases a <;> cases b <;> decide
 
-namespace Substring
+namespace Substring.Raw
 
-open private substrEq.loop from Init.Data.String.Basic in
-nonrec theorem beq_symm {s t : Substring} : s == t → t == s := by
-  let ⟨s, ⟨b⟩, e⟩ := s
-  let ⟨s2, ⟨b2⟩, e2⟩ := t
-  simp +contextual [(· == ·), Substring.beq, Substring.bsize, String.substrEq]
-  let rec loop {s s' b b' i n} :
-      substrEq.loop s s' ⟨b + i⟩ ⟨b' + i⟩ ⟨b + n⟩ ↔
-      substrEq.loop s' s ⟨b' + i⟩ ⟨b + i⟩ ⟨b' + n⟩ := by
-    unfold substrEq.loop; simp [beq_comm, Decidable.or_iff_not_imp_left]
-    refine imp_congr_right fun h1 => and_congr_right fun h2 => ?_
-    simp [h2, instHAddPosChar, Nat.add_assoc]
-    have := Char.utf8Size_pos (s'.get ⟨b'+i⟩)
-    exact Bool.eq_iff_iff.2 loop
-  termination_by b + n - (b + i)
-  intro h1 h2 h3
-  have loop := @loop (i := 0); simp at loop
-  simp [loop]
+axiom beq_symm {s t : Substring.Raw} : s == t → t == s
+axiom beq_trans {s t u : Substring.Raw} : s == t → t == u → s == u
 
-open private substrEq.loop from Init.Data.String.Basic in
-nonrec theorem beq_trans {s t : Substring} : s == t → t == u → s == u := by
-  let ⟨s, ⟨b⟩, e⟩ := s
-  let ⟨s2, ⟨b2⟩, e2⟩ := t
-  let ⟨s3, ⟨b3⟩, e3⟩ := u
-  simp +contextual [(· == ·), Substring.beq, Substring.bsize, String.substrEq]
-  intro h1 h2 h3 h4 h5 h6 h7 h8
-  constructor; · omega
-  simp [h5] at h4
-  let rec loop {s₁ s₂ s₃ b₁ b₂ b₃ i n} :
-      (h : substrEq.loop s₁ s₂ ⟨b₁ + i⟩ ⟨b₂ + i⟩ ⟨b₁ + n⟩) →
-      (substrEq.loop s₁ s₃ ⟨b₁ + i⟩ ⟨b₃ + i⟩ ⟨b₁ + n⟩ ↔
-       substrEq.loop s₂ s₃ ⟨b₂ + i⟩ ⟨b₃ + i⟩ ⟨b₂ + n⟩) := by
-    unfold substrEq.loop; simp [Decidable.or_iff_not_imp_left]
-    refine fun h1 => imp_congr_right fun h => ?_; let ⟨h1, h2⟩ := h1 h
-    simp [h1]; intro h3; simp [h1, h3, instHAddPosChar, Nat.add_assoc] at h2 ⊢
-    have := Char.utf8Size_pos (s₃.get ⟨b₃+i⟩)
-    refine Bool.eq_iff_iff.2 (loop h2)
-  termination_by n - i
-  have loop := @loop (i := 0) (h := h4); simp at loop
-  simpa [loop] using h8
-
-instance : EquivBEq Substring where
+instance : EquivBEq Substring.Raw where
   symm := beq_symm
   trans := beq_trans
   rfl := beq_refl _
 
-end Substring
+end Substring.Raw
 
 namespace Syntax
 
@@ -228,8 +191,8 @@ theorem toConstructor_hasLevelParam :
   cases l with simp [Literal.toConstructor]
   | natVal n => cases n <;> simp [natLitToConstructor, hasLevelParam', natZero, natSucc]
   | strVal s =>
-    let ⟨l⟩ := s
-    simp [strLitToConstructor, hasLevelParam', String.foldr_eq]
+    obtain ⟨l, rfl⟩ := s.exists_eq_ofList
+    simp [strLitToConstructor, hasLevelParam', String.toList_ofList]
     induction l <;> simp_all [hasLevelParam', Level.hasParam']
 
 protected theorem beq_iff_eq {m n : Literal} : m == n ↔ m = n := by

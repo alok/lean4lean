@@ -128,7 +128,7 @@ def VExpr.listCharLit : List Char → VExpr
 
 def VExpr.trLiteral : Literal → VExpr
   | .natVal n => .natLit n
-  | .strVal s => .app .stringMk (.listCharLit s.data)
+  | .strVal s => .app .stringMk (.listCharLit s.toList)
 
 def VEnv.ReflectsNatNatNat (env : VEnv) (fc : Name) (f : Nat → Nat → Nat) :=
   env.contains fc →

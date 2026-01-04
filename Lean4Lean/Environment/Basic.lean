@@ -58,6 +58,8 @@ def checkName (env : Environment) (n : Name)
     if primitives.contains n then
       throw <| .other s!"unexpected use of primitive name {n}"
 
+export private ImportedModule.mainModule? from Lean.Environment
+
 open private subsumesInfo Kernel.Environment.mk moduleNames moduleNameMap parts toEffectiveImport
   from Lean.Environment
 
@@ -97,9 +99,9 @@ def finalizeImport (s : ImportState) (imports : Array Import) (mainModule : Name
         privateConstantMap := constantMap'
         if let some cinfoPrev := cinfoPrev? then
           -- Recall that the map has not been modified when `cinfoPrev? = some _`.
-          if subsumesInfo cinfo cinfoPrev then
+          if subsumesInfo privateConstantMap cinfo cinfoPrev then
             privateConstantMap := privateConstantMap.insert cname cinfo
-          else if !subsumesInfo cinfoPrev cinfo then
+          else if !subsumesInfo privateConstantMap cinfoPrev cinfo then
             throwAlreadyImported s const2ModIdx modIdx cname
       const2ModIdx := const2ModIdx.insertIfNew cname modIdx
     for cname in data.extraConstNames do

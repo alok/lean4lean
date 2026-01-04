@@ -10,8 +10,13 @@ deriving instance ToExpr for LevelMVarId
 deriving instance ToExpr for Level
 deriving instance ToExpr for MVarId
 deriving instance ToExpr for BinderInfo
-deriving instance ToExpr for String.Pos
-deriving instance ToExpr for Substring
+deriving instance ToExpr for String.Pos.Raw
+
+instance (s : String) : ToExpr s.Pos where
+  toExpr p := mkApp2 (mkConst ``String.pos!) (toExpr s) (toExpr p.offset)
+  toTypeExpr := mkApp (mkConst ``String.Pos) (toExpr s)
+
+deriving instance ToExpr for Substring.Raw
 deriving instance ToExpr for SourceInfo
 deriving instance ToExpr for Syntax
 deriving instance ToExpr for DataValue

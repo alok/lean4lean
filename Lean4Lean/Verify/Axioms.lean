@@ -79,13 +79,12 @@ axiom Expr.mkAppRangeAux.eq_def (n : Nat) (args : Array Expr) (i : Nat) (e : Exp
 
 namespace Substring
 
-/-- info: false -/
-#guard_msgs in #eval let s : Substring := ⟨"", ⟨1⟩, 0⟩; s == s
+/-- info: true -/
+#guard_msgs in #eval let s : Substring.Raw := ⟨"", ⟨1⟩, 0⟩; s == s
 
-/-- This is not true, as demonstrated above; it fails on substrings with bad UTF-8. (lean4#10511)
-However, this is likely to be fixed by fixing `Substring` rather than changing invariants to
-avoid it, so we make this assumption on the hope that it gets fixed upstream. -/
-@[instance] axiom beq_refl (s : Substring) : s == s
+/-- Historically this failed on substrings with bad UTF-8 (lean4#10511).
+We keep the axiom to pin down the expected behavior. -/
+@[instance] axiom beq_refl (s : Substring.Raw) : s == s
 
 end Substring
 
