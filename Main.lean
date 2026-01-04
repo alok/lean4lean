@@ -28,6 +28,43 @@ end Environment
 def Expr.getUsedConstants' (e : Expr) : NameSet :=
   e.foldConsts {} fun c cs => cs.insert c
 
+partial def Expr.getBinderNameAt? (e : Expr) (i : Nat) : Option Name :=
+  match e with
+  | .forallE n _ b _ =>
+      match i with
+      | 0 => some n
+      | i+1 => Expr.getBinderNameAt? b i
+  | _ => none
+
+def getProjNameFromCtor? (env : Kernel.Environment) (structName : Name) (idx : Nat) : Option Name := do
+  let some (.inductInfo info) := env.find? structName | none
+  let [ctorName] := info.ctors | none
+  let some (.ctorInfo ctor) := env.find? ctorName | none
+  if idx >= ctor.numFields then
+    none
+  else
+    let some fieldName := Expr.getBinderNameAt? ctor.type (ctor.numParams + idx) | none
+    if fieldName.isAnonymous then none else some (structName ++ fieldName)
+
+partial def Expr.collectConstsAndProjs (env : Kernel.Environment) (e : Expr) (s : NameSet) : NameSet :=
+  match e with
+  | .forallE _ d b _ => Expr.collectConstsAndProjs env b (Expr.collectConstsAndProjs env d s)
+  | .lam _ d b _ => Expr.collectConstsAndProjs env b (Expr.collectConstsAndProjs env d s)
+  | .mdata _ b => Expr.collectConstsAndProjs env b s
+  | .letE _ t v b _ =>
+      Expr.collectConstsAndProjs env b (Expr.collectConstsAndProjs env v (Expr.collectConstsAndProjs env t s))
+  | .app f a => Expr.collectConstsAndProjs env a (Expr.collectConstsAndProjs env f s)
+  | .proj structName idx b =>
+      let s := Expr.collectConstsAndProjs env b s
+      match getProjNameFromCtor? env structName idx with
+      | some projFn => s.insert projFn
+      | none => s
+  | .const c _ => s.insert c
+  | _ => s
+
+def Expr.getUsedConstantsWithProjs (env : Kernel.Environment) (e : Expr) : NameSet :=
+  Expr.collectConstsAndProjs env e {}
+
 namespace ConstantInfo
 
 /-- Return all names appearing in the type or value of a `ConstantInfo`. -/
@@ -37,6 +74,17 @@ def getUsedConstants (c : ConstantInfo) : NameSet :=
   | none => match c with
     | .inductInfo val => .ofList val.ctors
     | .opaqueInfo val => val.value.getUsedConstants'
+    | .ctorInfo val => ({} : NameSet).insert val.name
+    | .recInfo val => .ofList val.all
+    | _ => {}
+
+/-- Like `getUsedConstants`, but also include projection functions referenced by `.proj`. -/
+def getUsedConstantsWithProjs (env : Kernel.Environment) (c : ConstantInfo) : NameSet :=
+  c.type.getUsedConstantsWithProjs env ++ match c.value? with
+  | some v => v.getUsedConstantsWithProjs env
+  | none => match c with
+    | .inductInfo val => .ofList val.ctors
+    | .opaqueInfo val => val.value.getUsedConstantsWithProjs env
     | .ctorInfo val => ({} : NameSet).insert val.name
     | .recInfo val => .ofList val.all
     | _ => {}
@@ -77,7 +125,7 @@ def Lean.Kernel.Exception.mapEnvM [Monad m]
   match ex with
   | unknownConstant env c => return .unknownConstant (← f env) c
   | alreadyDeclared env c => return .alreadyDeclared (← f env) c
-  | declTypeMismatch env d t => return .declTypeMismatch env d t
+  | declTypeMismatch env d t => return .declTypeMismatch (← f env) d t
   | declHasMVars env c e => return declHasMVars (← f env) c e
   | declHasFVars env c e => return declHasFVars (← f env) c e
   | funExpected env lctx e => return funExpected (← f env) lctx e
@@ -136,6 +184,8 @@ def addDecl (d : Declaration) : M Unit := do
         println! "{(← get).env.header.mainModule}:{d.name}: lean4lean took {t2 - t1}"
     modify fun s => { s with env, numAdded := s.numAdded + 1 }
   | .error ex =>
+    if (← read).verbose then
+      println! "error while adding {d.name}"
     throwKernelException ex
 
 deriving instance BEq for ConstantVal
@@ -155,8 +205,11 @@ and add it to the environment.
 -/
 partial def replayConstant (name : Name) : M Unit := do
   if ← isTodo name then
+    if (← get).env.contains name then
+      modify fun s => { s with pending := s.pending.erase name }
+      return
     let some ci := (← read).newConstants[name]? | unreachable!
-    replayConstants ci.getUsedConstants
+    replayConstants (ci.getUsedConstantsWithProjs (← get).env)
     -- Check that this name is still pending: a mutual block may have taken care of it.
     if (← get).pending.contains name then
       match ci with
@@ -187,7 +240,7 @@ partial def replayConstant (name : Name) : M Unit := do
         -- Make sure we are really finished with the constructors.
         for (_, ctors) in ctorInfo do
           for ctor in ctors do
-            replayConstants ctor.getUsedConstants
+            replayConstants (ctor.getUsedConstantsWithProjs (← get).env)
         let types : List InductiveType := ctorInfo.map fun ⟨ci, ctors⟩ =>
           { name := ci.name
             type := ci.type
@@ -254,10 +307,17 @@ def replay (ctx : Context) (env : Environment) (decl : Option Name := none) :
       remaining := remaining.insert n
   let (_, s) ← StateRefT'.run (s := { env, remaining }) do
     ReaderT.run (r := ctx) do
+      let names := remaining.toList.toArray |>.qsort (fun a b => a.toString < b.toString)
       match decl with
       | some d => replayConstant d
       | none =>
-        for n in remaining do
+        for n in names do
+          if let some ci := (← read).newConstants[n]? then
+            match ci with
+            | .axiomInfo _ | .thmInfo _ =>
+              replayConstant n
+            | _ => pure ()
+        for n in names do
           replayConstant n
       checkPostponedConstructors
       checkPostponedRecursors
@@ -265,21 +325,40 @@ def replay (ctx : Context) (env : Environment) (decl : Option Name := none) :
   return (s.numAdded, s.env)
 
 open private ImportedModule.mk from Lean.Environment in
-unsafe def replayFromImports (module : Name) (verbose := false) (compare := false) : IO Nat := do
-  let mFile ← findOLean module
+private def findOLeanParts (mod : Name) : IO (Array System.FilePath) := do
+  let mFile ← findOLean mod
   unless (← mFile.pathExists) do
-    throw <| IO.userError s!"object file '{mFile}' of module {module} does not exist"
-  let (mod, region) ← readModuleData mFile
-  let (_, s) ← (importModulesCore mod.imports).run
-  let env ← match Kernel.Environment.finalizeImport s mod.imports module 0 with
-    | .ok env => pure env
-    | .error e => throw <| .userError <| ← (e.toMessageData {}).toString
-  let mut newConstants := {}
-  for name in mod.constNames, ci in mod.constants do
-    newConstants := newConstants.insert name ci
-  let (n, env') ← replay { newConstants, verbose, compare } env
+    throw <| IO.userError s!"object file '{mFile}' of module {mod} does not exist"
+  let mut fnames := #[mFile]
+  let sFile := OLeanLevel.server.adjustFileName mFile
+  if (← sFile.pathExists) then
+    fnames := fnames.push sFile
+    let pFile := OLeanLevel.private.adjustFileName mFile
+    if (← pFile.pathExists) then
+      fnames := fnames.push pFile
+  return fnames
+
+unsafe def replayFromImports (module : Name) (verbose := false) (compare := false) : IO Nat := do
+  let fnames ← findOLeanParts module
+  let (n, env', regions) ← do
+    let parts ← readModuleDataParts fnames
+    let some (mod, _) := parts[0]? |
+      throw <| IO.userError s!"missing module data for {module}"
+    let (_, s) ← (importModulesCore mod.imports).run
+    let env ← match Kernel.Environment.finalizeImport s mod.imports module 0 with
+      | .ok env => pure env
+      | .error e => throw <| .userError <| ← (e.toMessageData {}).toString
+    let regions := parts.map (·.2)
+    let (n, env') ← do
+      let mut newConstants := {}
+      for (part, _) in parts do
+        for name in part.constNames, ci in part.constants do
+          newConstants := newConstants.insert name ci
+      replay { newConstants, verbose, compare } env
+    pure (n, env', regions)
   (Environment.ofKernelEnv env').freeRegions
-  region.free
+  for region in regions do
+    region.free
   pure n
 
 unsafe def replayFromFresh (module : Name)
