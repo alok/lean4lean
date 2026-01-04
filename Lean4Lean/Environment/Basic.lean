@@ -38,7 +38,7 @@ def primitives : NameSet := .ofList [
   ``Nat.gcd, ``Nat.mod, ``Nat.div, ``Nat.beq, ``Nat.ble,
   ``Nat.bitwise, ``Nat.land, ``Nat.lor, ``Nat.xor,
   ``Nat.shiftLeft, ``Nat.shiftRight,
-  ``String, ``String.mk]
+  ``String]
 
 /--
 Returns true iff `constName` is a non-recursive inductive datatype that has only one constructor and no indices.

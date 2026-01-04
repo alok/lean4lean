@@ -117,7 +117,7 @@ def VExpr.natLit : Nat → VExpr
 
 def VExpr.char : VExpr := .const ``Char []
 def VExpr.string : VExpr := .const ``String []
-def VExpr.stringMk : VExpr := .const ``String.mk []
+def VExpr.stringOfList : VExpr := .const ``String.ofList []
 def VExpr.listChar : VExpr := .app (.const ``List [.zero]) .char
 def VExpr.listCharNil : VExpr := .app (.const ``List.nil [.zero]) .char
 def VExpr.listCharCons : VExpr := .app (.const ``List.cons [.zero]) .char
@@ -128,7 +128,7 @@ def VExpr.listCharLit : List Char → VExpr
 
 def VExpr.trLiteral : Literal → VExpr
   | .natVal n => .natLit n
-  | .strVal s => .app .stringMk (.listCharLit s.toList)
+  | .strVal s => .app .stringOfList (.listCharLit s.toList)
 
 def VEnv.ReflectsNatNatNat (env : VEnv) (fc : Name) (f : Nat → Nat → Nat) :=
   env.contains fc →
@@ -160,9 +160,9 @@ structure VEnv.HasPrimitives (env : VEnv) : Prop where
   natXor : env.ReflectsNatNatNat ``Nat.xor Nat.xor
   natShiftLeft : env.ReflectsNatNatNat ``Nat.shiftLeft Nat.shiftLeft
   natShiftRight : env.ReflectsNatNatNat ``Nat.shiftRight Nat.shiftRight
-  string : env.contains ``String → env.contains ``String.mk ∧
+  string : env.contains ``String → env.contains ``String.ofList ∧
     env.HasType 0 [] .listCharNil .listChar ∧
     env.HasType 0 [] .listCharCons (.forallE .char <| .forallE .listChar .listChar) ∧
     env.HasType 0 [] .charOfNat (.forallE .nat .char)
-  stringMk : env.constants ``String.mk = some ci →
+  stringOfList : env.constants ``String.ofList = some ci →
     ci = { uvars := 0, type := .forallE .listChar .string }

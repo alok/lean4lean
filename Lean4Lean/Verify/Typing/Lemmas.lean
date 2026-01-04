@@ -1698,7 +1698,7 @@ theorem TrExprS.lit_has_type (wf : env.Ordered) (henv : env.HasPrimitives)
     let .lit H := H
     let .app _ _ H _ := H
     let .const H .. := H
-    let ⟨_, H⟩ := wf.constWF (henv.stringMk H ▸ H)
+    let ⟨_, H⟩ := wf.constWF (henv.stringOfList H ▸ H)
     let ⟨H1, _, H⟩ := H.forallE_inv wf
     let ⟨_, H, _⟩ := H.const_inv wf (by exact ⟨trivial, H1⟩)
     exact ⟨_, H⟩
@@ -1732,11 +1732,11 @@ theorem TrExprS.natLit (henv : env.HasPrimitives) (H : env.contains ``Nat) (n) :
 @[simp] theorem VExpr.instL_natLit : (VExpr.natLit n).instL ls = VExpr.natLit n := by
   induction n <;> simp [*, natLit, instL]
 
-theorem TrExprS.stringMk (henv : env.HasPrimitives) (H : env.contains ``String) :
-    TrExprS env Us Δ (.const ``String.mk []) .stringMk ∧
-    env.HasType Us.length Δ.toCtx .stringMk (.forallE .listChar .string) := by
+theorem TrExprS.stringOfList (henv : env.HasPrimitives) (H : env.contains ``String) :
+    TrExprS env Us Δ (.const ``String.ofList []) .stringOfList ∧
+    env.HasType Us.length Δ.toCtx .stringOfList (.forallE .listChar .string) := by
   let ⟨⟨_, H⟩, _⟩ := henv.string H
-  cases henv.stringMk H
+  cases henv.stringOfList H
   exact ⟨.const H rfl rfl, .const H nofun rfl⟩
 
 theorem TrExprS.charOfNat (wf : env.Ordered) (henv : env.HasPrimitives)
@@ -1759,7 +1759,7 @@ theorem TrExprS.listChar (wf : env.Ordered) (henv : env.HasPrimitives) (H : env.
     TrExprS env Us Δ (.app (.const ``List [.zero]) (.const ``Char [])) .listChar ∧
     env.IsType Us.length Δ.toCtx .listChar := by
   let ⟨⟨_, H⟩, _⟩ := henv.string H
-  let ⟨_, H⟩ := wf.constWF (henv.stringMk H ▸ H)
+  let ⟨_, H⟩ := wf.constWF (henv.stringOfList H ▸ H)
   let ⟨⟨_, H⟩, _⟩ := H.forallE_inv wf
   refine ⟨?_, _, (H.instL (ls := []) nofun).weak0 wf⟩
   let ⟨_, _, A, B⟩ := H.app_inv wf trivial
@@ -1818,7 +1818,7 @@ theorem TrExprS.trLiteral (wf : env.Ordered) (henv : env.HasPrimitives)
   match l with
   | .natVal n => exact TrExprS.natLit henv H _
   | .strVal s =>
-    have a := TrExprS.stringMk henv H (Us := Us) (Δ := Δ)
+    have a := TrExprS.stringOfList henv H (Us := Us) (Δ := Δ)
     have b := TrExprS.listCharLit wf henv H (Us := Us) (Δ := Δ) s.toList
     exact ⟨.lit (.app a.2 b.2 a.1 b.1), a.2.app b.2⟩
 
